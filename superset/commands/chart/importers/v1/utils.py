@@ -16,6 +16,7 @@
 # under the License.
 
 import copy
+import uuid
 from inspect import isclass
 from typing import Any
 
@@ -69,6 +70,39 @@ def import_chart(
 
     # TODO (betodealmeida): move this logic to import_from_dict
     config["params"] = json.dumps(config["params"])
+
+    # migrate old viz types to new ones
+    config = migrate_chart(config)
+
+    chart = Slice.import_from_dict(config, recursive=False, allow_reparenting=True)
+    if chart.id is None:
+        db.session.flush()
+
+    if (user := get_user()) and user not in chart.owners:
+        chart.owners.append(user)
+
+    return chart
+
+def import_chart_as_new(
+    config: dict[str, Any]
+) -> Slice:
+    config["uuid"] = str(uuid.uuid4())
+    filter_chart_annotations(config)
+
+    config["params"] = json.dumps(config["params"])
+
+    base_name = config["slice_name"]
+    name = base_name
+    copy_counter = 1
+
+    while db.session.query(Slice).filter_by(
+        datasource_id=config["datasource_id"],
+        slice_name=name
+    ).first() is not None:
+        name = f"Copy {copy_counter} of {base_name}"
+        copy_counter += 1
+
+    config["slice_name"] = name
 
     # migrate old viz types to new ones
     config = migrate_chart(config)

@@ -53,6 +53,7 @@ from superset.commands.dashboard.exceptions import (
 from superset.commands.dashboard.export import ExportDashboardsCommand
 from superset.commands.dashboard.fave import AddFavoriteDashboardCommand
 from superset.commands.dashboard.importers.dispatcher import ImportDashboardsCommand
+from superset.commands.dashboard.importers.v1.new import ImportDashboardsNewCommand
 from superset.commands.dashboard.permalink.create import CreateDashboardPermalinkCommand
 from superset.commands.dashboard.unfave import DelFavoriteDashboardCommand
 from superset.commands.dashboard.update import UpdateDashboardCommand
@@ -172,6 +173,7 @@ class DashboardRestApi(BaseSupersetModelRestApi):
         "thumbnail",
         "copy_dash",
         "cache_dashboard_screenshot",
+        "import_new",
         "screenshot",
     }
     resource_name = "dashboard"
@@ -1396,6 +1398,91 @@ class DashboardRestApi(BaseSupersetModelRestApi):
             ssh_tunnel_passwords=ssh_tunnel_passwords,
             ssh_tunnel_private_keys=ssh_tunnel_private_keys,
             ssh_tunnel_priv_key_passwords=ssh_tunnel_priv_key_passwords,
+        )
+        command.run()
+        return self.response(200, message="OK")
+
+    @expose("/import-new/", methods=("POST",))
+    @protect()
+    @statsd_metrics
+    @event_logger.log_this_with_context(
+        action=lambda self, *args, **kwargs: f"{self.__class__.__name__}.import_new",
+        log_to_statsd=False,
+    )
+    @requires_form_data
+    def import_new(self) -> Response:
+        """Import dashboard(s) with associated charts/datasets/databases.
+        ---
+        post:
+          summary: Import dashboard(s) with associated charts/datasets/databases
+          requestBody:
+            required: true
+            content:
+              multipart/form-data:
+                schema:
+                  type: object
+                  properties:
+                    formData:
+                      description: upload file (ZIP or JSON)
+                      type: string
+                      format: binary
+                    database_uuid:
+                      description: >-
+                        The ID of the database to import the assets into.
+                      type: integer
+                      example: 1
+                    schema:
+                      description: >-
+                        The schema to import the assets into.
+                      type: string
+                      example: "public"
+          responses:
+            200:
+              description: Dashboard import result
+              content:
+                application/json:
+                  schema:
+                    type: object
+                    properties:
+                      message:
+                        type: string
+            400:
+              $ref: '#/components/responses/400'
+            401:
+              $ref: '#/components/responses/401'
+            422:
+              $ref: '#/components/responses/422'
+            500:
+              $ref: '#/components/responses/500'
+        """
+        upload = request.files.get("formData")
+        if not upload:
+            return self.response_400()
+        if is_zipfile(upload):
+            with ZipFile(upload) as bundle:
+                contents = get_contents_from_bundle(bundle)
+        else:
+            upload.seek(0)
+            contents = {upload.filename: upload.read()}
+
+        if not contents:
+            raise NoValidFilesFoundError()
+
+        database_uuid = (
+            request.form["database_uuid"]
+            if "database_uuid" in request.form
+            else None
+        )
+        schema = (
+            request.form["schema"]
+            if "schema" in request.form
+            else None
+        )
+
+        command = ImportDashboardsNewCommand(
+            contents,
+            database_uuid=database_uuid,
+            schema=schema,
         )
         command.run()
         return self.response(200, message="OK")

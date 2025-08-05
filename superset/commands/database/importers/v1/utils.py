@@ -114,3 +114,9 @@ def add_permissions(database: Database, ssh_tunnel: SSHTunnel) -> None:
                     schema,
                 ),
             )
+
+def get_database_by_uuid_or_fail(database_uuid: str) -> Database:
+    database = db.session.query(Database).filter_by(uuid=database_uuid).first()
+    if database:
+        return database
+    raise ImportFailedError("Database doesn't exist or user lacks permission.")

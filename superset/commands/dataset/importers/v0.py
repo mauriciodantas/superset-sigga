@@ -93,6 +93,35 @@ def import_dataset(
         database_id,
     )
 
+def import_dataset_as_new(
+    i_datasource: BaseDatasource,
+    database_id: Optional[int] = None,
+    import_time: Optional[int] = None,
+) -> int:
+    """Imports the datasource from the object to the database.
+
+    Metrics and columns and datasource will be overridden if exists.
+    This function can be used to import/export dashboards between multiple
+    superset instances. Audit metadata isn't copied over.
+    """
+
+    lookup_database: Callable[[BaseDatasource], Optional[Database]]
+    lookup_datasource: Callable[[BaseDatasource], Optional[BaseDatasource]]
+    if isinstance(i_datasource, SqlaTable):
+        lookup_database = lookup_sqla_database
+        lookup_datasource = lookup_sqla_table
+
+    else:
+        raise DatasetInvalidError
+
+    return import_datasource(
+        i_datasource,
+        lookup_database,
+        lookup_datasource,
+        import_time,
+        database_id,
+    )
+
 
 def lookup_sqla_metric(metric: SqlMetric) -> SqlMetric:
     return (

@@ -16,11 +16,13 @@
 # under the License.
 
 import logging
+import uuid
 from typing import Any
 
 from superset import db, security_manager
 from superset.commands.exceptions import ImportFailedError
 from superset.models.dashboard import Dashboard
+from superset.models.slice import Slice
 from superset.utils import json
 from superset.utils.core import get_user
 
@@ -142,7 +144,6 @@ def update_id_refs(  # pylint: disable=too-many-locals
 
     return fixed
 
-
 def import_dashboard(
     config: dict[str, Any],
     overwrite: bool = False,
@@ -192,3 +193,120 @@ def import_dashboard(
         dashboard.owners.append(user)
 
     return dashboard
+
+def import_dashboard_as_new(
+    config: dict[str, Any],
+) -> Dashboard:
+    base_name = config["dashboard_title"]
+    dashboard_title = base_name
+    copy_counter = 1
+
+    while db.session.query(Dashboard).filter_by(
+        dashboard_title=dashboard_title
+    ).first() is not None:
+        dashboard_title = f"Copy {copy_counter} of {base_name}"
+        copy_counter += 1
+
+    config["dashboard_title"] = dashboard_title
+
+    config = config.copy()
+    config["uuid"] = str(uuid.uuid4())
+
+    # removed in https://github.com/apache/superset/pull/23228
+    if "metadata" in config and "show_native_filters" in config["metadata"]:
+        del config["metadata"]["show_native_filters"]
+
+    for key, new_name in JSON_KEYS.items():
+        if config.get(key) is not None:
+            value = config.pop(key)
+            try:
+                config[new_name] = json.dumps(value)
+            except TypeError:
+                logger.info("Unable to encode `%s` field: %s", key, value)
+
+    dashboard = Dashboard.import_from_dict(config, recursive=False)
+    if dashboard.id is None:
+        db.session.flush()
+
+    if (user := get_user()) and user not in dashboard.owners:
+        dashboard.owners.append(user)
+
+    return dashboard
+
+
+
+def update_charts_relationship(  # pylint: disable=too-many-locals
+    config: dict[str, Any],
+    chart_info: dict[str, Slice],
+) -> dict[str, Any]:
+    """Update dashboard metadata to use new chart IDs and UUIDs"""
+    fixed = config.copy()
+
+    # Map from old chart ID (as string) to new chart ID (as int)
+    old_chart_id_to_new_id: dict[str, int] = {}
+
+    # Update chart references in the dashboard layout ("position")
+    position = fixed.get("position", {})
+    for child in position.values():
+        if isinstance(child, dict) and child.get("type") == "CHART":
+            old_chart_uuid = child["meta"]["uuid"]
+            old_chart_id = child["meta"]["chartId"]
+
+            new_chart_metadata = chart_info[old_chart_uuid]
+            print(f"Updating chart ID {old_chart_id} to {new_chart_metadata}")
+            new_chart_uuid = new_chart_metadata.uuid
+            new_chart_id = new_chart_metadata.id
+
+            # Save mapping from old ID to new ID
+            old_chart_id_to_new_id[str(old_chart_id)] = new_chart_id
+
+            # Update chart UUID and ID in layout
+            child["meta"]["uuid"] = new_chart_uuid
+            child["meta"]["chartId"] = new_chart_id
+
+    # Update chart_configuration metadata
+    metadata = fixed.get("metadata", {})
+    chart_configuration = metadata.get("chart_configuration", {})
+
+    new_chart_configuration = {}
+
+    for old_id_str, config_entry in chart_configuration.items():
+        new_id = old_chart_id_to_new_id.get(old_id_str)
+
+        if new_id is None:
+            continue  # Skip charts without a corresponding new ID
+
+        # Clone and update chart metadata
+        updated_entry = config_entry.copy()
+        updated_entry["id"] = new_id
+
+        # Update chartsInScope with new IDs
+        charts_in_scope = updated_entry.get("crossFilters", {}).get("chartsInScope", [])
+        updated_charts_in_scope = [
+            old_chart_id_to_new_id.get(str(chart_id), chart_id)
+            for chart_id in charts_in_scope
+        ]
+        logger.warning("Updated chart IDs: %s", updated_charts_in_scope)
+        updated_entry["crossFilters"]["chartsInScope"] = updated_charts_in_scope
+
+        # Add the updated entry using the new chart ID as the key
+        new_chart_configuration[str(new_id)] = updated_entry
+
+    # Replace the chart_configuration with the updated version
+    metadata["chart_configuration"] = new_chart_configuration
+
+    # Update global_chart_configuration.chartsInScope
+    global_chart_config = metadata.get("global_chart_configuration", {})
+    global_charts_in_scope = global_chart_config.get("chartsInScope", [])
+
+    updated_global_charts_in_scope = [
+        old_chart_id_to_new_id.get(str(chart_id), chart_id)
+        for chart_id in global_charts_in_scope
+    ]
+    global_chart_config["chartsInScope"] = updated_global_charts_in_scope
+    metadata["global_chart_configuration"] = global_chart_config
+
+    fixed["metadata"] = metadata
+
+    return fixed
+
