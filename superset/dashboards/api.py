@@ -1426,7 +1426,7 @@ class DashboardRestApi(BaseSupersetModelRestApi):
                       description: upload file (ZIP or JSON)
                       type: string
                       format: binary
-                    database_uuid:
+                    database_id:
                       description: >-
                         The ID of the database to import the assets into.
                       type: integer
@@ -1468,9 +1468,9 @@ class DashboardRestApi(BaseSupersetModelRestApi):
         if not contents:
             raise NoValidFilesFoundError()
 
-        database_uuid = (
-            request.form["database_uuid"]
-            if "database_uuid" in request.form
+        database_id = (
+            request.form["database_id"]
+            if "database_id" in request.form
             else None
         )
         schema = (
@@ -1481,7 +1481,7 @@ class DashboardRestApi(BaseSupersetModelRestApi):
 
         command = ImportDashboardsNewCommand(
             contents,
-            database_uuid=database_uuid,
+            database_id=database_id,
             schema=schema,
         )
         command.run()

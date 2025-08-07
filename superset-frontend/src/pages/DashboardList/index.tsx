@@ -55,6 +55,7 @@ import FaveStar from 'src/components/FaveStar';
 import PropertiesModal from 'src/dashboard/components/PropertiesModal';
 import { Tooltip } from 'src/components/Tooltip';
 import ImportModelsModal from 'src/components/ImportModal/index';
+import ImportNewDashboardModal from 'src/components/ImportNewDashboardModal/index';
 
 import Dashboard from 'src/dashboard/containers/Dashboard';
 import {
@@ -176,6 +177,7 @@ function DashboardList(props: DashboardListProps) {
     useState<CRUDDashboard | null>(null);
 
   const [importingDashboard, showImportModal] = useState<boolean>(false);
+  const [importingDashboardFull, showImportDashboardModal] = useState<boolean>(false);
   const [passwordFields, setPasswordFields] = useState<string[]>([]);
   const [preparingExport, setPreparingExport] = useState<boolean>(false);
   const [sshTunnelPasswordFields, setSSHTunnelPasswordFields] = useState<
@@ -199,6 +201,20 @@ function DashboardList(props: DashboardListProps) {
 
   const handleDashboardImport = () => {
     showImportModal(false);
+    refreshData();
+    addSuccessToast(t('Dashboard imported'));
+  };
+
+  const openDashboardImportModalFull = () => {
+    showImportDashboardModal(true);
+  };
+
+  const closeDashboardImportModalFull = () => {
+    showImportDashboardModal(false);
+  };
+
+  const handleDashboardImportFull = () => {
+    showImportDashboardModal(false);
     refreshData();
     addSuccessToast(t('Dashboard imported'));
   };
@@ -684,18 +700,32 @@ function DashboardList(props: DashboardListProps) {
       },
     });
 
+    // subMenuButtons.push({
+    //   name: (
+    //     <Tooltip
+    //       id="import-tooltip"
+    //       title={t('Import dashboards')}
+    //       placement="bottomRight"
+    //     >
+    //       <Icons.Import data-test="import-button" />
+    //     </Tooltip>
+    //   ),
+    //   buttonStyle: 'link',
+    //   onClick: openDashboardImportModal,
+    // });
+
     subMenuButtons.push({
       name: (
         <Tooltip
           id="import-tooltip"
-          title={t('Import dashboards')}
+          title={t('Import dashboards Full')}
           placement="bottomRight"
         >
           <Icons.Import data-test="import-button" />
         </Tooltip>
       ),
       buttonStyle: 'link',
-      onClick: openDashboardImportModal,
+      onClick: openDashboardImportModalFull,
     });
   }
   return (
@@ -816,6 +846,16 @@ function DashboardList(props: DashboardListProps) {
         setSSHTunnelPrivateKeyPasswordFields={
           setSSHTunnelPrivateKeyPasswordFields
         }
+      />
+
+      <ImportNewDashboardModal
+        resourceName="dashboard"
+        resourceLabel={t('dashboard')}
+        addDangerToast={addDangerToast}
+        addSuccessToast={addSuccessToast}
+        onDashboardImport={handleDashboardImportFull}
+        show={importingDashboardFull}
+        onHide={closeDashboardImportModalFull}
       />
 
       {preparingExport && <Loading />}

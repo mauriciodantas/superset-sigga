@@ -893,3 +893,73 @@ export const reportSelector = (
   }
   return null;
 };
+
+// Simplified state for table import.
+interface ImportNewDashboard {
+  loading: boolean;
+  failed: boolean;
+}
+
+/**
+ * Custom hook to import tables from a file.
+ *
+ * @param resourceLabel - The resource label to be used in messages (e.g., 'Table').
+ * @param handleErrorMsg - Callback to display the error message in the UI.
+ */
+export function useImportNewDashboard(
+  resource: string,
+  resourceLabel: string,
+  handleErrorMsg: (errorMsg: string) => void,
+) {
+  const [state, setState] = useState<ImportNewDashboard>({
+    loading: false,
+    failed: false,
+  });
+
+  function updateState(update: Partial<ImportNewDashboard>) {
+    setState(currentState => ({ ...currentState, ...update }));
+  }
+
+  const importResource = useCallback(
+    (formData: FormData) => {
+      // Set loading state
+      updateState({
+        loading: true,
+        failed: false,
+      });
+
+      return SupersetClient.post({
+        endpoint: `/api/v1/dashboard/import-new/`,
+        body: formData,
+        headers: { Accept: 'application/json' },
+      })
+        .then(() => {
+          updateState({ failed: false });
+          return true; // Success
+        })
+        .catch(response =>
+          getClientErrorObject(response).then(error => {
+            updateState({
+              failed: true,
+            });
+            // Displays a formatted error message.
+            handleErrorMsg(
+              t(
+                'An error occurred while importing the %s: %s',
+                resourceLabel,
+                error.message || error.error || 'Unknown error',
+              ),
+            );
+            return false; // Failure
+          }),
+        )
+        .finally(() => {
+          // Ensures loading state is turned off at the end
+          updateState({ loading: false });
+        });
+    },
+    [resourceLabel, handleErrorMsg],
+  );
+
+  return { state, importResource };
+}

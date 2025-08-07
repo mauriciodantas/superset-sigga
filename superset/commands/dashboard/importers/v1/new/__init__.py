@@ -30,7 +30,7 @@ from superset.commands.dashboard.importers.v1.utils import (
     import_dashboard_as_new,
     update_charts_relationship,
 )
-from superset.commands.database.importers.v1.utils import get_database_by_uuid_or_fail
+from superset.commands.database.importers.v1.utils import get_database_by_id_or_fail
 from superset.commands.dataset.importers.v1.utils import import_dataset_as_new
 from superset.commands.exceptions import CommandInvalidError, ImportFailedError
 from superset.commands.importers.v1.utils import (
@@ -73,16 +73,16 @@ class ImportDashboardsNewCommand(BaseCommand):
         self.ssh_tunnel_priv_key_passwords: dict[str, str] = (
             kwargs.get("ssh_tunnel_priv_key_passwords") or {}
         )
-        self.database_uuid: str = kwargs.get("database_uuid") or ""
+        self.database_id: str = kwargs.get("database_id") or ""
         self.schema: str = kwargs.get("schema") or ""
         self._configs: dict[str, Any] = {}
 
     # pylint: disable=too-many-locals
     @staticmethod
-    def _import_as_new(database_uuid:str, schema:str, configs: dict[str, Any]) -> None:
+    def _import_as_new(database_id:int, schema:str, configs: dict[str, Any]) -> None:
 
         # get database
-        database = get_database_by_uuid_or_fail(database_uuid)
+        database = get_database_by_id_or_fail(database_id)
 
         def get_default_catalog(self) -> str | None:
             """
@@ -153,7 +153,7 @@ class ImportDashboardsNewCommand(BaseCommand):
     )
     def run(self) -> None:
         self.validate()
-        self._import_as_new(self.database_uuid, self.schema, self._configs)
+        self._import_as_new(self.database_id, self.schema, self._configs)
 
     def validate(self) -> None:
         exceptions: list[ValidationError] = []
@@ -165,7 +165,7 @@ class ImportDashboardsNewCommand(BaseCommand):
             exceptions.append(exc)
             metadata = None
 
-        if not self.database_uuid:
+        if not self.database_id:
             exceptions.append(ValidationError("Database ID is required"))
         if not self.schema:
             exceptions.append(ValidationError("Schema is required"))
