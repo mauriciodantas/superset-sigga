@@ -16,7 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-import { FunctionComponent, useState, ChangeEvent, useCallback } from 'react';
+import { FunctionComponent, useState, useCallback } from 'react';
 import { useDispatch } from 'react-redux';
 
 import { UploadChangeParam, UploadFile } from 'antd/lib/upload/interface';

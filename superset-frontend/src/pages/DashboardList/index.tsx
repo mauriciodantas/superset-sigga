@@ -191,10 +191,6 @@ function DashboardList(props: DashboardListProps) {
     setSSHTunnelPrivateKeyPasswordFields,
   ] = useState<string[]>([]);
 
-  const openDashboardImportModal = () => {
-    showImportModal(true);
-  };
-
   const closeDashboardImportModal = () => {
     showImportModal(false);
   };
